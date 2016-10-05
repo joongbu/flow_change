@@ -75,8 +75,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <ExecutablePath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\include;$(IncludePath);$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
     <LibraryPath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\amd64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -84,8 +85,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <ExecutablePath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\include;$(IncludePath);$(ExecutablePath)</ExecutablePath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
     <LibraryPath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\amd64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\windivert\WinDivert-1.1.8-MSVC\WinDivert-1.1.8-MSVC\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
