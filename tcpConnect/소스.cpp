@@ -5,22 +5,26 @@
 #include <string.h>
 #include <Ws2tcpip.h>
 #include "windivert.h"
+#include <windows.h>
+#include <iostream>
+using namespace std;
 #define MAXBUF  0xFFFF
 typedef struct
 {
 	WINDIVERT_IPHDR ip;
 	WINDIVERT_TCPHDR tcp;
 } TCPPACKET, *PTCPPACKET;
-//dst_port °¡ web port¿¡ ¼ÓÇÏ´Â °æ¿ì ÇØ´ç packetÀ» dst_ip¸¦ proxy_ip·Î º¯°æ
-char *src_ip, *dst_ip;
-char *src_port, *dst_port;
+
+UINT32 targetip;
+UINT32 ProxyIP;
+
 int __cdecl main(int argc, char **argv)
 {
 	HANDLE handle;
 	INT16 priority = 0;
 	unsigned char packet[MAXBUF];
 	UINT packet_len;
-	WINDIVERT_ADDRESS recv_addr, send_addr;
+	WINDIVERT_ADDRESS recv_addr;
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT payload_len;
@@ -55,103 +59,132 @@ int __cdecl main(int argc, char **argv)
 			GetLastError());
 		exit(EXIT_FAILURE);
 	}
+	UINT32 old_ip = 0;
+	UINT16 old_port = 0;
 	// Main loop:
+	inet_pton(AF_INET, "10.100.111.117", &ProxyIP);
+	inet_pton(AF_INET, "121.131.52.53", &targetip);
 	while (TRUE)
 	{
-		// Read a matching packet.
-		if (!WinDivertRecv(handle, packet, sizeof(packet), &recv_addr,
-			&packet_len))
+		int count = 0;
+		if (!WinDivertRecv(handle, packet, sizeof(packet), &recv_addr, &packet_len))
 		{
 			fprintf(stderr, "warning: failed to read packet\n");
 			continue;
 		}
-		// Print info about the matching packet.
+
+
 		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, &payload_len);
 		if (ip_header == NULL)
 		{
 			continue;
 		}
-		// Dump packet info: 
-		if (ip_header != NULL)
+
+		if (ip_header != NULL && tcp_header != NULL)
 		{
-			//UINT32 Ip;
-			//inet_pton(AF_INET, victim, &Ip);
-			//inet_pton(AF_INET,attack,&ip_header->DstAddr); //changing IP
-			//ip_header->Checksum = WinDivertHelperCalcChecksums(packet, packet_len, 0);
 			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
 			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
-			//printf("ip.SrcAddr=%u.%u.%u.%u ip.DstAddr=%u.%u.%u.%u \n",
-				//src_addr[0], src_addr[1], src_addr[2], src_addr[3],
-				//dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-			//if (!WinDivertSend(handle, packet, packet_len, &send_addr, NULL))
-			//	printf("error : don't send");
-			if (tcp_header != NULL)
+
+
+
+			if (ip_header->DstAddr == targetip &&  ntohs(tcp_header->DstPort) == 80) //ì ‘ì†í•˜ë ¤ëŠ” port     
 			{
-				UINT16 old_port;
-				UINT32 old_ip;
-				//printf("input port\n");
-				//printf("ip.SrcAddr=%u.%u.%u.%u ip.DstAddr=%u.%u.%u.%u \n",
-				//src_addr[0], src_addr[1], src_addr[2], src_addr[3],
-				//dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-				//printf("source Port : %d\n", ntohs(tcp_header->SrcPort));
-				//printf("destination port : %d\n", ntohs(tcp_header->DstPort));
-				//printf("source Port : %d\n", ntohs(tcp_header->SrcPort));
-				//printf("destination port : %d\n", ntohs(tcp_header->DstPort));
-				//debug
-				
-				
-				
-				if (ntohs(tcp_header->DstPort) == 1234)
+				printf("1. SYN : %d ACK: %d   PSH : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh);
+				for (int i = 0; i < packet_len; i++)
 				{
-					old_ip = ip_header->DstAddr;//±âÁ¸ IP °¡Áö°í ÀÖ±â
-					inet_pton(AF_INET, "127.0.0.1", &ip_header->DstAddr);
-					old_port = tcp_header->DstPort;//±âÁ¸ port °¡Áö°í ÀÖ±â
+					printf("%02x ", packet[i]);
+					if (i != 0 && i % 15 == 0)
+						printf("\n");
+
+				}
+
+
+				if (tcp_header->Psh == 1 && tcp_header->Ack == 1)
+				{
+					//outbound
+					
+					ip_header->DstAddr = ProxyIP;
 					tcp_header->DstPort = htons(8080);
-					tcp_header->Checksum = WinDivertHelperCalcChecksums(packet, packet_len, 0);//ÇØ´ç ÇÏ´Â proxy port ¼³Á¤
-
+					printf("syn, psh\n");
+					printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+					printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+					printf("src port : %d\n", ntohs(tcp_header->SrcPort));
+					printf("dst port : %d\n", ntohs(tcp_header->DstPort));
+					printf("outbound\n");
+					WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				//printf("old_port : %d\n", ntohs(old_port));
 					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-						printf("error : don't send\n");//º¸³»ÁöÁö°¡¾Ê´Â´Ù.
-
-					printf("º¯°æ port\n");
-					printf("ip.SrcAddr=%u.%u.%u.%u ip.DstAddr=%u.%u.%u.%u \n", src_addr[0], src_addr[1], src_addr[2], src_addr[3],
-						dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-					printf("source Port : %d\n", ntohs(tcp_header->SrcPort));
-					printf("destination port : %d\n", ntohs(tcp_header->DstPort));
-
-					for (int i = 0; i < packet_len; i++)
-					{
-						if (i % 16 == 0)
-							printf("\n");
-						printf("%x ", packet[i]);
-					}
-					if (ntohs(tcp_header->SrcPort) == 8080)//proxy·Î ºÎÅÍ ÆÐÅ¶ÀÌ ¼ö½ÅµÇ¸é(ÇØ´çÆ÷Æ®·Î Á¶°Ç? ¾Æ´Ï¸é IP?)
-					{
-						ip_header->SrcAddr = old_ip;
-						tcp_header->SrcPort = old_port;
-						tcp_header->Checksum = WinDivertHelperCalcChecksums(packet, packet_len, 0);
-						if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-							printf("error : don't send");
-					}
+						printf("error : don't send");
+					count++;
 
 
+					//http ok ì‚¬ì¸ì„ ë³´ë‚´ì¤˜ì•¼ë¨.
+
+				}
+				if(count != 1)
+				{
+					//inbound
+					old_ip = ip_header->DstAddr; //ì´ê²Œ ì ‘ì†í•˜ë ¤ëŠ” IP
+					old_port = tcp_header->DstPort; // ì ‘ì†í•˜ë ¤ëŠ” port
+					ip_header->DstAddr = ProxyIP;
+					tcp_header->DstPort = htons(8080);
+					WinDivertHelperCalcChecksums(packet, packet_len, 0);
+					printf("old_port : %d\n", ntohs(old_port));
+					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
+						printf("error : don't send");
+				}
+				if (count == 1)
+				{
+					count = 0;
+					continue;
+				}
+
+			}
+			else if (ntohs(tcp_header->SrcPort) == 8080)
+			{
+				printf("2(8080). SYN : %d ACK: %d   PSH : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh);
+				printf("src port : %d", ntohs(tcp_header->SrcPort));
+				printf("dst port : %d", ntohs(tcp_header->DstPort));
+				for (int i = 0; i < packet_len; i++)
+				{
+					printf("%02x ", packet[i]);
+					if (i != 0 && i % 15 == 0)
+						printf("\n");
 				}
 				/*
-				if(tcp_header->Syn)
+				if (tcp_header->Psh == 1 && tcp_header->Ack == 1)
 				{
+					//inbound
 
-					if((tcp_header->Ack && tcp_header->Syn))
-					{
-						if(tcp_header->Ack)
-						{
-
-						}
-					}
+					ip_header->SrcAddr = targetip;
+					tcp_header->SrcPort = old_port;
+					printf("syn, psh\n");
+					printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+					printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+					printf("src port : %d\n", ntohs(tcp_header->SrcPort));
+					printf("dst port : %d\n", ntohs(tcp_header->DstPort));
+					printf("inbound\n");
+					WinDivertHelperCalcChecksums(packet, packet_len, 0);
+					recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+					printf("old_port : %d\n", ntohs(old_port));
+					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
+						printf("error : don't send");
 				}
 				*/
-			}
+				
+					ip_header->SrcAddr = old_ip; //target ip
+					tcp_header->SrcPort = old_port; // target port 80
+					WinDivertHelperCalcChecksums(packet, packet_len, 0);
+					recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
+						printf("error : don't send");
+				
+				
 
-			putchar('\n');
+			}
 		}
+
+		putchar('\n');
 	}
 }
 
