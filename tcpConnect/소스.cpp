@@ -28,8 +28,6 @@ int __cdecl main(int argc, char **argv)
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT payload_len;
-
-	char *data;
 	// Check arguments.
 	switch (argc)
 	{
@@ -62,10 +60,9 @@ int __cdecl main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	UINT32 old_ip = 0;
-	UINT16 old_port = 0;
+	UINT32 old_port = 0;
 	// Main loop:
 	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
-	inet_pton(AF_INET, "121.131.52.53", &targetip);
 	bool check = false;
 	while (TRUE)
 	{
@@ -76,9 +73,7 @@ int __cdecl main(int argc, char **argv)
 			fprintf(stderr, "warning: failed to read packet\n");
 			continue;
 		}
-
-		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, &data, &payload_len);
-
+		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, &payload_len);
 		if (ip_header == NULL)
 		{
 			continue;
@@ -87,60 +82,46 @@ int __cdecl main(int argc, char **argv)
 		{
 			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
 			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
-
-			if (check && ntohs(tcp_header->SrcPort) == 8080)
+			if (ntohs(tcp_header->DstPort) == 80)
 			{
-				ip_header->SrcAddr = targetip;
-				tcp_header->SrcPort = htons(80);
+				printf("1. SYN : %d ACK: %d   PSH : %d FIN : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh, tcp_header->Fin);
+				old_ip = ip_header->DstAddr;
+				ip_header->DstAddr = ProxyIP;
+				tcp_header->DstPort = htons(8080);
+				printf("syn, psh\n");
+				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
+				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
 				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
 				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 			}
-			else
+			else if (ntohs(tcp_header->SrcPort) == 8080)
 			{
-				if (tcp_header->Ack == 1 && tcp_header->Psh == 1)
-				{
-					check = true;
-				}
-				if (ip_header->DstAddr == targetip &&  ntohs(tcp_header->DstPort) == 80) //접속하려는 port     
-				{
-					printf("1. SYN : %d ACK: %d   PSH : %d FIN : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh, tcp_header->Fin);
-					ip_header->DstAddr = ProxyIP;
-					tcp_header->DstPort = htons(8080);
-					printf("syn, psh\n");
-					printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
-					printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-					printf("src port : %d\n", ntohs(tcp_header->SrcPort));
-					printf("dst port : %d\n", ntohs(tcp_header->DstPort));
-					WinDivertHelperCalcChecksums(packet, packet_len, 0);
-					recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
-					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-						printf("error : don't send");
-				}
-				else if (ntohs(tcp_header->SrcPort) == 8080)
-				{
-
-					printf("2(Proxy). SYN : %d ACK: %d   PSH : %d FIN : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh, tcp_header->Fin);
-					printf("src port : %d", ntohs(tcp_header->SrcPort));
-					printf("dst port : %d", ntohs(tcp_header->DstPort));
-					ip_header->SrcAddr = targetip;
-					tcp_header->SrcPort = htons(80);
-					printf("syn, psh\n");
-					printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
-					printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-					printf("src port : %d\n", ntohs(tcp_header->SrcPort));
-					printf("dst port : %d\n", ntohs(tcp_header->DstPort));
-					WinDivertHelperCalcChecksums(packet, packet_len, 0);
-					recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
-					if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-						printf("error : don't send");
-				}
+				printf("2(8080). SYN : %d ACK: %d   PSH : %d FIN : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh, tcp_header->Fin);
+				printf("src port : %d", ntohs(tcp_header->SrcPort));
+				printf("dst port : %d", ntohs(tcp_header->DstPort));
+				ip_header->SrcAddr = old_ip;
+				tcp_header->SrcPort = htons(80);
+				printf("syn, psh\n");
+				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
+				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
+				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+				printf("old_port : %d\n", ntohs(old_port));
+				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
+					printf("error : don't send");
+				printf("send!!\n");
 			}
-			if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-				printf("error : don't send");
 		}
+		if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
+			printf("error : don't send");
 		putchar('\n');
+
 	}
 
 }
