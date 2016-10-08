@@ -64,8 +64,9 @@ int __cdecl main(int argc, char **argv)
 	UINT32 old_ip = 0;
 	UINT16 old_port = 0;
 	// Main loop:
-	inet_pton(AF_INET, "10.100.111.117", &ProxyIP);
+	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
 	inet_pton(AF_INET, "121.131.52.53", &targetip);
+	bool check = false;
 	while (TRUE)
 	{
 		PVOID data = NULL;
@@ -86,7 +87,20 @@ int __cdecl main(int argc, char **argv)
 		{
 			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
 			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
+			if (tcp_header->Ack == 1 && tcp_header->Psh == 1)
+			{
+				check = true;
+			}
+			if (check && ntohs(tcp_header->SrcPort) == 8080)
+			{
+				ip_header->SrcAddr = targetip;
+				tcp_header->SrcPort = htons(80);
+				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				printf("old_port : %d\n", ntohs(old_port));
 
+			}
+			else
+			{
 			if (ip_header->DstAddr == targetip &&  ntohs(tcp_header->DstPort) == 80) //접속하려는 port     
 			{
 				printf("1. SYN : %d ACK: %d   PSH : %d FIN : %d\n", tcp_header->Syn, tcp_header->Ack, tcp_header->Psh, tcp_header->Fin);
@@ -109,7 +123,9 @@ int __cdecl main(int argc, char **argv)
 				printf("outbound\n");
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
 				printf("old_port : %d\n", ntohs(old_port));
-				recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+				
+				
 				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 
@@ -136,7 +152,7 @@ int __cdecl main(int argc, char **argv)
 				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
 				printf("inbound\n");
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
-				recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
+				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
 				printf("old_port : %d\n", ntohs(old_port));
 				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
@@ -149,7 +165,7 @@ int __cdecl main(int argc, char **argv)
 				continue;
 			}
 		
-
+			}
 
 		}
 		
