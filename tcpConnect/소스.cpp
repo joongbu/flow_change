@@ -7,7 +7,7 @@
 #include "windivert.h"
 #include <windows.h>
 #include <iostream>
-using namespace std;
+#include <thread>
 #define MAXBUF  0xFFFF
 typedef struct
 {
@@ -15,17 +15,68 @@ typedef struct
 	WINDIVERT_TCPHDR tcp;
 } TCPPACKET, *PTCPPACKET;
 UINT32 ProxyIP;
-int __cdecl main(int argc, char **argv)
+void function(HANDLE h)
 {
-	UINT32 old_ip = 0;
-	HANDLE handle;
-	INT16 priority = 0;
 	unsigned char packet[MAXBUF];
 	UINT packet_len;
 	WINDIVERT_ADDRESS recv_addr;
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT payload_len;
+	UINT32 old_ip = 0;
+	while (TRUE)
+	{
+		if (!WinDivertRecv(h, packet, sizeof(packet), &recv_addr, &packet_len))
+		{
+			fprintf(stderr, "warning: failed to read packet\n");
+			continue;
+		}
+		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, &payload_len);
+		if (ip_header == NULL)
+		{
+			continue;
+		}
+		if (ip_header != NULL && tcp_header != NULL)
+		{
+			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
+			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
+			if (ntohs(tcp_header->DstPort) == 80)
+			{
+				old_ip = ip_header->DstAddr;
+				ip_header->DstAddr = ProxyIP;
+				tcp_header->DstPort = htons(8080);
+				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
+					printf("error : don't send");
+			}
+			else if (ntohs(tcp_header->SrcPort) == 8080)
+			{
+
+				ip_header->SrcAddr = old_ip;
+				tcp_header->SrcPort = htons(80);
+				printf("syn, psh\n");
+				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
+				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
+				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
+				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
+				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
+					printf("error : don't send");
+				printf("send!!\n");
+			}
+		}
+		if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
+			printf("error : don't send");
+		putchar('\n');
+
+	}
+}
+
+int __cdecl main(int argc, char **argv)
+{
+	
+	HANDLE handle;
+	INT16 priority = 0;
 	// Check arguments.
 	switch (argc)
 	{
@@ -58,51 +109,10 @@ int __cdecl main(int argc, char **argv)
 	}
 	// Main loop:
 	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
-	while (TRUE)
-	{	
-		if (!WinDivertRecv(handle, packet, sizeof(packet), &recv_addr, &packet_len))
-		{
-			fprintf(stderr, "warning: failed to read packet\n");
-			continue;
-		}
-		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, &payload_len);
-		if (ip_header == NULL)
-		{
-			continue;
-		}
-		if (ip_header != NULL && tcp_header != NULL)
-		{
-			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
-			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
-			if (ntohs(tcp_header->DstPort) == 80)
-			{
-				old_ip = ip_header->DstAddr;
-				ip_header->DstAddr = ProxyIP;
-				tcp_header->DstPort = htons(8080);
-				WinDivertHelperCalcChecksums(packet, packet_len, 0);
-				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-					printf("error : don't send");
-			}
-			else if (ntohs(tcp_header->SrcPort) == 8080)
-			{
-
-				ip_header->SrcAddr = old_ip;
-				tcp_header->SrcPort = htons(80);
-				printf("syn, psh\n");
-				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
-				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
-				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
-				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
-				WinDivertHelperCalcChecksums(packet, packet_len, 0);
-				if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-					printf("error : don't send");
-				printf("send!!\n");
-			}
-		}
-		if (!WinDivertSend(handle, packet, packet_len, &recv_addr, NULL))
-			printf("error : don't send");
-		putchar('\n');
-
+	while(1)
+	{
+	std::thread thread(function, handle);
+	thread.join();
 	}
-
+	
 }
