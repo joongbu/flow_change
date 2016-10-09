@@ -19,15 +19,29 @@ UINT32 ProxyIP;
 struct oldpacket{
 	UINT32 old_ip;
 	UINT16 old_port;
-} ;
-UINT32 old_ip;
-UINT16 old_port;
-std::map<int,oldpacket> m;
+	
+	bool operator < (const oldpacket &old) const
+	{
+		return (old_ip < old.old_ip || (old_ip == old.old_ip && old_port < old.old_port));
+	}
+	bool operator == (const oldpacket &old) const
+	{
+		return (old_ip == old.old_ip && old_port == old.old_port);
+	}
+	bool operator > (const oldpacket &old) const
+	{
+		return (old_ip > old.old_ip || (old_ip == old.old_ip && old_port > old.old_port));
+	}
 
+
+} ;
+//UINT32 old_ip;
+//UINT16 old_port;
+std::map<oldpacket,oldpacket> m;
 bool check = false;
 void function(HANDLE h)
 {
-	oldpacket old;
+	oldpacket old_src, old_dst, new_src, new_dst;
 	unsigned char packet[MAXBUF];
 	UINT packet_len;
 	WINDIVERT_ADDRESS recv_addr;
@@ -57,35 +71,42 @@ void function(HANDLE h)
 			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
 			if (ntohs(tcp_header->DstPort) == 80)
 			{
-			
-
-				printf("syn, psh\n");
 				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
 				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
 				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
 				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
-				old_ip = ip_header->DstAddr;
+				old_src.old_ip = ip_header->SrcAddr;
+				old_src.old_port = tcp_header->SrcPort;
+				old_dst.old_ip = ip_header->DstAddr;
+				old_dst.old_port = tcp_header->DstPort;
+				m[old_src] = old_dst;
 				ip_header->DstAddr = ProxyIP;
-				old_port = tcp_header->SrcPort;
 				tcp_header->DstPort = htons(8080);
-
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
 				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 			}
 			else if (ntohs(tcp_header->SrcPort) == 8080)
 			{
-				printf("syn, psh\n");
+				new_dst.old_ip = ip_header->DstAddr;//10.100.111.117 (local)
+				new_dst.old_port = tcp_header->DstPort; // src port
+				new_src = m[new_dst];
+				if ((new_src.old_ip == old_dst.old_ip) && (new_src.old_port == old_dst.old_port))
+				{
+				ip_header->SrcAddr = new_src.old_ip;
+				tcp_header->SrcPort = new_src.old_port;
+				printf("2\n");
 				printf("src_ip : %u.%u.%u.%u\n", src_addr[0], src_addr[1], src_addr[2], src_addr[3]);
 				printf("dst_ip : %u.%u.%u.%u\n", dst_addr[0], dst_addr[1], dst_addr[2], dst_addr[3]);
 				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
 				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
-				ip_header->SrcAddr = old_ip;
-				tcp_header->SrcPort = htons(80);
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
 				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 				printf("send!!\n");
+				}
+
+				
 
 			}
 
@@ -138,9 +159,11 @@ int __cdecl main(int argc, char **argv)
 	}
 	// Main loop:
 	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
-
-
+	int number;
+	printf("Á¾·á : (1)\n");
 	std::thread thread(function, handle);
 	thread.join();
+	scanf_s("%d", &number, sizeof(int));
+
 
 }
