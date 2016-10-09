@@ -35,10 +35,7 @@ struct oldpacket{
 
 
 } ;
-//UINT32 old_ip;
-//UINT16 old_port;
 std::map<oldpacket,oldpacket> m;
-bool check = false;
 void function(HANDLE h)
 {
 	oldpacket old_src, old_dst, new_src, new_dst;
@@ -48,9 +45,6 @@ void function(HANDLE h)
 	PWINDIVERT_IPHDR ip_header;
 	PWINDIVERT_TCPHDR tcp_header;
 	UINT payload_len;
-	
-
-	
 	while (TRUE)
 	{
 		if (!WinDivertRecv(h, packet, sizeof(packet), &recv_addr, &packet_len))
@@ -59,14 +53,12 @@ void function(HANDLE h)
 			continue;
 		}
 		WinDivertHelperParsePacket(packet, packet_len, &ip_header, NULL, NULL, NULL, &tcp_header, NULL, NULL, &payload_len);
-
 		if (ip_header == NULL)
 		{
 			continue;
 		}
 		if (ip_header != NULL && tcp_header != NULL)
 		{
-			
 			UINT8 *src_addr = (UINT8 *)&ip_header->SrcAddr;
 			UINT8 *dst_addr = (UINT8 *)&ip_header->DstAddr;
 			if (ntohs(tcp_header->DstPort) == 80)
@@ -105,21 +97,12 @@ void function(HANDLE h)
 					printf("error : don't send");
 				printf("send!!\n");
 				}
-
-				
-
 			}
-
-
 		}
 		else
 			if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 				printf("error : don't send");
-		if (check)
-			break;
-
 	}
-
 }
 
 int __cdecl main(int argc, char **argv)
@@ -160,10 +143,6 @@ int __cdecl main(int argc, char **argv)
 	// Main loop:
 	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
 	int number;
-	printf("Á¾·á : (1)\n");
 	std::thread thread(function, handle);
 	thread.join();
-	scanf_s("%d", &number, sizeof(int));
-
-
 }
