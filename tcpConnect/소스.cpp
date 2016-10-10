@@ -16,25 +16,24 @@ typedef struct
 	WINDIVERT_TCPHDR tcp;
 } TCPPACKET, *PTCPPACKET;
 UINT32 ProxyIP;
+
 struct oldpacket{
 	UINT32 old_ip;
 	UINT16 old_port;
 	
-	bool operator < (const oldpacket &old) const
-	{
-		return (old_ip < old.old_ip || (old_ip == old.old_ip && old_port < old.old_port));
-	}
-	bool operator == (const oldpacket &old) const
-	{
-		return (old_ip == old.old_ip && old_port == old.old_port);
-	}
-	bool operator > (const oldpacket &old) const
-	{
-		return (old_ip > old.old_ip || (old_ip == old.old_ip && old_port > old.old_port));
-	}
-
-
 } ;
+bool operator < (const oldpacket &first , const oldpacket &second)
+{
+	return (first.old_ip < second.old_ip || (first.old_ip == second.old_ip && first.old_port < second.old_port));
+}
+bool operator == (const oldpacket &first, const oldpacket &second)
+{
+	return (first.old_ip == second.old_ip && first.old_port == second.old_port);
+}
+bool operator > (const oldpacket &first, const oldpacket &second)
+{
+	return (first.old_ip > second.old_ip || (first.old_ip == second.old_ip && first.old_port > second.old_port));
+}
 std::map<oldpacket,oldpacket> m;
 void function(HANDLE h)
 {
@@ -75,6 +74,7 @@ void function(HANDLE h)
 				ip_header->DstAddr = ProxyIP;
 				tcp_header->DstPort = htons(8080);
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
 				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 			}
@@ -93,6 +93,7 @@ void function(HANDLE h)
 				printf("src port : %d\n", ntohs(tcp_header->SrcPort));
 				printf("dst port : %d\n", ntohs(tcp_header->DstPort));
 				WinDivertHelperCalcChecksums(packet, packet_len, 0);
+				//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
 				if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 					printf("error : don't send");
 				printf("send!!\n");
@@ -100,8 +101,12 @@ void function(HANDLE h)
 			}
 		}
 		else
+		{ 
+			WinDivertHelperCalcChecksums(packet, packet_len, 0);
+			//recv_addr.Direction = WINDIVERT_DIRECTION_INBOUND;
 			if (!WinDivertSend(h, packet, packet_len, &recv_addr, NULL))
 				printf("error : don't send");
+		}
 	}
 }
 
@@ -140,6 +145,7 @@ int __cdecl main(int argc, char **argv)
 			GetLastError());
 		exit(EXIT_FAILURE);
 	}
+
 	// Main loop:
 	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
 	int number;
