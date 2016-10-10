@@ -10,18 +10,12 @@
 #include <thread>
 #include <map>
 #define MAXBUF  0xFFFF
-typedef struct
-{
-	WINDIVERT_IPHDR ip;
-	WINDIVERT_TCPHDR tcp;
-} TCPPACKET, *PTCPPACKET;
 UINT32 ProxyIP;
-
 struct oldpacket{
 	UINT32 old_ip;
 	UINT16 old_port;
 	
-} ;
+};
 bool operator < (const oldpacket &first , const oldpacket &second)
 {
 	return (first.old_ip < second.old_ip || (first.old_ip == second.old_ip && first.old_port < second.old_port));
@@ -109,7 +103,6 @@ void function(HANDLE h)
 		}
 	}
 }
-
 int __cdecl main(int argc, char **argv)
 {
 
@@ -118,21 +111,18 @@ int __cdecl main(int argc, char **argv)
 	// Check arguments.
 	switch (argc)
 	{
-	case 2:
-		break;
 	case 3:
-		priority = (INT16)atoi(argv[2]);
+		inet_pton(AF_INET, argv[2], &ProxyIP);
+		break;
+	case 4: 
+		priority = (INT16)atoi(argv[3]);
 		break;
 	default:
-		fprintf(stderr, "usage: %s windivert-filter [priority]\n",
+		fprintf(stderr, "usage: %s windivert-filter [ProxyIP] [priority]\n",
 			argv[0]);
-		fprintf(stderr, "examples:\n");
-		fprintf(stderr, "\t%s true\n", argv[0]);
-		fprintf(stderr, "\t%s \"outbound and tcp.DstPort == 80\" 1000\n",
-			argv[0]);
-		fprintf(stderr, "\t%s \"inbound and tcp.Syn\" -4000\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
+	
 	handle = WinDivertOpen(argv[1], WINDIVERT_LAYER_NETWORK, priority, 0);
 	if (handle == INVALID_HANDLE_VALUE)
 	{
@@ -145,10 +135,6 @@ int __cdecl main(int argc, char **argv)
 			GetLastError());
 		exit(EXIT_FAILURE);
 	}
-
-	// Main loop:
-	inet_pton(AF_INET, "10.100.111.121", &ProxyIP);
-	int number;
 	std::thread thread(function, handle);
 	thread.join();
 }
